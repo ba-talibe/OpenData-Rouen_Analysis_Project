@@ -115,12 +115,20 @@ def get_data_as_dataframe(
         total_count = response["total_count"] 
     return total_count, pd.DataFrame(data )
 
+def update_local_data(local_data_df : pd.DataFrame, update_data_dict : dict, json_file_path, csv_file_path):
+    list_local_data =local_data_df.to_dict(orient='records')
+    update_data_dict.extend(list_local_data)
+    # Utilisez json.dump() pour sauvegarder le dictionnaire dans le fichier JSON
+    df=pd.DataFrame(update_data_dict)
+    with open(json_file_path, 'w') as fichier_json:
+        json.dump(update_data_dict, fichier_json)
+
+    df.to_csv(csv_file_path, index=False)
 
 def update_dataset(path):
     # L'URL de l'API pour donné de compteur 
     limit_datacount = 100 # télécharger 100 données mais ne pas saugarder localement 
     offset_datacount = 0
-    dateEtHeure ='2023-12-24T23'
     #api avec un filtre "order by" dans l'ordre décroissant de dates dans datacount
     api_url_datacount = "https://data.metropole-rouen-normandie.fr/api/explore/v2.1/catalog/datasets/eco-counter-data/records?order_by=date%20DESC&limit=" + str(limit_datacount) +"&offset=" + str(offset_datacount)
 
@@ -169,22 +177,30 @@ def update_dataset(path):
 
     if (total_count != 0) : # le nombre de données mises à jour 
         while (total_count >= 100) : # data limit is 100
-            update_data.extend(requests.get(api_url_update_data).json()['results'])
+            incomming_data = requests.get(api_url_update_data).json()
+            if "results" not in incomming_data:
+                print("resultat inatendu ", incomming_data)
+                update_local_data(local_data, update_data, json_file_path, csv_file_path)
+
+                update_dataset(path) 
+            update_data.extend(incomming_data["results"])
             total_count -= 100
             offset_datacount +=  100
             api_url_update_data ="https://data.metropole-rouen-normandie.fr/api/explore/v2.1/catalog/datasets/eco-counter-data/records?where=date%3Edate'"+dateEtHeure+"%3A00%3A00%2B01%3A00'&order_by=date%20DESC&limit="+str(limit_datacount)+"&offset="+str(offset_datacount)+"&timezone=Europe%2FBerlin"
 
         limit_datacount = total_count
         api_url_update_data ="https://data.metropole-rouen-normandie.fr/api/explore/v2.1/catalog/datasets/eco-counter-data/records?where=date%3Edate'"+dateEtHeure+"%3A00%3A00%2B01%3A00'&order_by=date%20DESC&limit="+str(limit_datacount)+"&offset="+str(offset_datacount)+"&timezone=Europe%2FBerlin"
-        update_data.extend(requests.get(api_url_update_data).json()['results'])
-        list_local_data =local_data.to_dict(orient='records')
-        update_data.extend(list_local_data)
-        # Utilisez json.dump() pour sauvegarder le dictionnaire dans le fichier JSON
-        df=pd.DataFrame(update_data)
-        with open(json_file_path, 'w') as fichier_json:
-            json.dump(update_data, fichier_json)
+        
+        
 
-        df.to_csv(csv_file_path, index=False)
+        incomming_data = requests.get(api_url_update_data).json()
+        if "results" not in incomming_data:
+            print("resultat inatendu ", incomming_data)
+            update_local_data(local_data, update_data, json_file_path, csv_file_path)
+            update_dataset(path) 
+             
+        update_data.extend(incomming_data['results'])
+        update_local_data(local_data, update_data, json_file_path, csv_file_path)
 
 def update_csv_dataset(path):
     # L'URL de l'API pour donné de compteur 
@@ -250,6 +266,7 @@ def update_csv_dataset(path):
         list_local_data =local_data.to_dict(orient='records')
         update_data.extend(list_local_data)
         # Utilisez json.dump() pour sauvegarder le dictionnaire dans le fichier JSON
+        df.drop_duplicates(subset='id', inplace=True)
         df=pd.DataFrame(update_data)
         df.to_csv(csv_file_path, index=False)
         
